@@ -45,6 +45,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   shortUrls     ShortUrl[]
+  createdAt DateTime @default(now())
 }
 
 model VerificationToken {

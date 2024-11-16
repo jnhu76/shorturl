@@ -3,9 +3,11 @@ import { UrlShortener } from '@/components/url-shortener';
 import { NavBar } from '@/components/nav-bar';
 import { getServerSession } from 'next-auth';
 import { authOptions } from './api/auth/[...nextauth]/route';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export default async function Home() {
-  // 仅获取 session 用于服务端渲染
+  // 不再检查 cookies，只依赖 session
   const session = await getServerSession(authOptions);
 
   return (

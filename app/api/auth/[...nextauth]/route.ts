@@ -1,73 +1,30 @@
-// src/app/api/auth/[...nextauth]/route.ts
+// app/api/auth/[...nextauth]/route.ts
 import {db} from '@/lib/db';
-import {PrismaAdapter} from '@auth/prisma-adapter';
 import {compare} from 'bcryptjs';
-import type {NextAuthOptions, Session, User} from 'next-auth';
-import type {JWT} from 'next-auth/jwt';
+import NextAuth from 'next-auth';
+import type {AuthOptions} from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
-interface CustomUser extends User {
-  id: string;
-  role: string;
-}
-
-interface CustomJWT extends JWT {
-  id: string;
-  role: string;
-  exp?: number;
-}
-
-interface CustomSession extends Session {
-  user: {
-    id: string; role: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-}
-
-// @ts-ignore
-const prismaAdapter = PrismaAdapter(db);
-
-export const authOptions: NextAuthOptions = {
-  // @ts-ignore
-  adapter: prismaAdapter,
-  session: {
-    strategy: 'jwt',
-    maxAge: 24 * 60 * 60,     // 24 hours
-    updateAge: 24 * 60 * 60,  // 24 hours
-  },
-  pages: {
-    signIn: '/login',
-    signOut: '/login',
-    error: '/login',
-  },
-  providers: [
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        email: {label: 'Email', type: 'email'},
-        password: {label: 'Password', type: 'password'},
-      },
-      async authorize(credentials): Promise<CustomUser|null> {
+export const authOptions: AuthOptions = {
+  providers: [CredentialsProvider({
+    name: 'Credentials',
+    credentials: {
+      email: {label: 'Email', type: 'email'},
+      password: {label: 'Password', type: 'password'}
+    },
+    async authorize(credentials) {
+      try {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         const user = await db.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            password: true,
-            role: true,
-          },
+          where: {email: credentials.email},
+          select:
+              {id: true, email: true, name: true, password: true, role: true}
         });
 
-        if (!user || !user.password) {
+        if (!user || !user.email || !user.password) {
           return null;
         }
 
@@ -78,63 +35,44 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // 确保返回的对象符合 User 接口
         return {
           id: user.id,
-          email: user.email || '',
-          name: user.name || '',
-          role: user.role,
+          email: user.email,      // 确保不为 null
+          name: user.name ?? '',  // 提供默认值
+          role: user.role
         };
-      },
-    }),
-  ],
+      } catch (error) {
+        console.error('Authentication error:', error);
+        return null;
+      }
+    }
+  })],
   callbacks: {
-    async jwt({token, user}): Promise<CustomJWT> {
+    async jwt({token, user}) {
       if (user) {
-        return {
-          ...token,
-          id: user.id,
-          role: (user as CustomUser).role,
-        } as CustomJWT;
+        token.id = user.id;
+        token.role = user.role;
       }
-
-      // 检查token是否过期
-      const nowTimestamp = Math.floor(Date.now() / 1000);
-      const tokenExp = (token as CustomJWT).exp;
-
-      if (tokenExp && typeof tokenExp === 'number' && nowTimestamp > tokenExp) {
-        // 如果token过期，返回一个带有默认值的token
-        return {
-          ...token,
-          id: '',
-          role: '',
-        } as CustomJWT;
+      return token;
+    },
+    async session({session, token}) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
       }
-
-      return token as CustomJWT;
-    },
-    async session({session, token}): Promise<CustomSession> {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id,
-          role: token.role,
-        },
-      } as CustomSession;
-    },
+      return session;
+    }
   },
-  events: {
-    async signOut({token, session}) {
-      // 可以在这里添加登出时的清理操作
-    },
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60,  // 30 days
   },
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === 'development',
-  jwt: {
-    maxAge: 24 * 60 * 60,  // 24 hours
-  },
+  pages: {
+    signIn: '/login',
+    signOut: '/',
+  }
 };
 
-import NextAuth from 'next-auth/next';
 const handler = NextAuth(authOptions);
 export {handler as GET, handler as POST};

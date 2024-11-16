@@ -5,18 +5,31 @@ import { signOut } from 'next-auth/react';
 
 export function SignOutButton() {
   const handleSignOut = async () => {
-    // 在登出前设置标记
-    localStorage.setItem('logout-timestamp', Date.now().toString());
-    
-    await signOut({
-      // 登出后重定向到首页
-      callbackUrl: '/',
-      // 不使用默认的重定向机制
-      redirect: false
-    });
-    
-    // 强制刷新页面以确保状态完全清除
-    window.location.href = '/';
+    try {
+      // 1. 设置登出标记
+      localStorage.setItem('logout-timestamp', Date.now().toString());
+      
+      // 2. 清除所有本地存储
+      localStorage.removeItem('next-auth.session-token');
+      localStorage.removeItem('next-auth.callback-url');
+      localStorage.removeItem('next-auth.csrf-token');
+      
+      // 3. 清除会话存储
+      sessionStorage.clear();
+      
+      // 4. 执行 next-auth 登出
+      await signOut({
+        callbackUrl: '/',
+        redirect: false
+      });
+      
+      // 5. 强制刷新并重定向到首页
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // 即使出错也强制刷新
+      window.location.href = '/';
+    }
   };
 
   return (

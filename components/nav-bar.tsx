@@ -9,39 +9,69 @@ import { useEffect, useState } from 'react';
 export function NavBar() {
   const { data: session, status } = useSession();
   const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // 检查本地存储中的登出标记
-    const isLoggedOut = localStorage.getItem('isLoggedOut');
-    
-    if (isLoggedOut === 'true' && status === 'authenticated') {
-      signOut({ redirect: false });
-    }
-    
     setMounted(true);
+    
+    // 检查登出时间戳
+    const logoutTimestamp = localStorage.getItem('logout-timestamp');
+    const currentTime = Date.now();
+    
+    // 如果存在登出时间戳，且在最近30秒内发生的登出
+    if (logoutTimestamp && (currentTime - parseInt(logoutTimestamp)) < 30000) {
+      setIsAuthenticated(false);
+      // 如果发现还有 session，强制登出
+      if (status === 'authenticated') {
+        signOut({ redirect: false });
+      }
+    } else {
+      setIsAuthenticated(status === 'authenticated' && !!session);
+    }
+  }, [status, session]);
+
+  // 监听存储事件，以便在其他标签页登出时同步状态
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'logout-timestamp') {
+        setIsAuthenticated(false);
+        if (status === 'authenticated') {
+          signOut({ redirect: false });
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [status]);
 
-  // 在组件挂载前不渲染任何内容
+  // 在初始加载前不显示登录状态
   if (!mounted) {
-    return <nav className="w-full px-6 py-4 border-b">
-      <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-xl font-semibold">短链接生成器</h1>
-      </div>
-    </nav>;
+    return (
+      <nav className="w-full px-6 py-4 border-b">
+        <div className="container mx-auto flex justify-between items-center">
+          <Link href="/" className="text-xl font-semibold">
+            短链接生成器
+          </Link>
+        </div>
+      </nav>
+    );
   }
 
   return (
     <nav className="w-full px-6 py-4 border-b">
       <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-xl font-semibold">短链接生成器</h1>
+        <Link href="/" className="text-xl font-semibold">
+          短链接生成器
+        </Link>
         <div className="space-x-4">
-          {status === 'authenticated' && session && !localStorage.getItem('isLoggedOut') ? (
+          {isAuthenticated ? (
             <div className="flex items-center gap-4">
               <Link
                 href="/dashboard"
                 className="text-gray-600 hover:text-gray-800"
               >
-                仪表盘
+                我的链接
               </Link>
               <SignOutButton />
             </div>
@@ -64,5 +94,4 @@ export function NavBar() {
         </div>
       </div>
     </nav>
-  );
-}
+  );}
